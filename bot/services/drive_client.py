@@ -1,6 +1,8 @@
 import asyncio
 import io
+import json
 import logging
+import os
 from typing import Any, TypedDict
 
 from google.oauth2 import service_account
@@ -32,14 +34,38 @@ class DriveUnavailableError(DriveClientError):
 
 
 def _get_credentials() -> service_account.Credentials:
+    """
+    Загружает credentials Google Drive.
+    Поддерживает:
+    - путь к JSON-файлу (как было раньше)
+    - сам JSON-ключ как строку (для Railway / переменных окружения)
+    """
     if not GOOGLE_APPLICATION_CREDENTIALS:
         raise DriveUnavailableError("GOOGLE_APPLICATION_CREDENTIALS is not configured")
 
-    logger.info("Loading Google credentials from %s", GOOGLE_APPLICATION_CREDENTIALS)
-    credentials = service_account.Credentials.from_service_account_file(
-        GOOGLE_APPLICATION_CREDENTIALS,
-        scopes=GOOGLE_DRIVE_SCOPES,
-    )
+    creds_data = GOOGLE_APPLICATION_CREDENTIALS
+
+    # Проверяем, является ли значение путём к существующему файлу
+    if os.path.exists(creds_data):
+        logger.info("Loading Google credentials from file: %s", creds_data)
+        credentials = service_account.Credentials.from_service_account_file(
+            creds_data,
+            scopes=GOOGLE_DRIVE_SCOPES,
+        )
+    else:
+        # Пытаемся интерпретировать как JSON-строку
+        try:
+            logger.info("Loading Google credentials from JSON string")
+            info = json.loads(creds_data)
+            credentials = service_account.Credentials.from_service_account_info(
+                info,
+                scopes=GOOGLE_DRIVE_SCOPES,
+            )
+        except json.JSONDecodeError as exc:
+            raise DriveUnavailableError(
+                "GOOGLE_APPLICATION_CREDENTIALS не является ни путём к файлу, ни валидным JSON"
+            ) from exc
+
     logger.info("Credentials loaded successfully")
     return credentials
 
