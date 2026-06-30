@@ -3,8 +3,9 @@ import logging
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
-from bot.handlers.portfolio_page import send_file_view, send_portfolio_page
+from bot.handlers.portfolio_page import send_portfolio_page
 from bot.keyboards.pagination import PortfolioCallback
+from bot.keyboards.portfolio import MENU_MESSAGE, portfolio_keyboard
 from bot.services.portfolio_cache import get_session
 
 logger = logging.getLogger(__name__)
@@ -43,60 +44,13 @@ async def on_page_change(callback: CallbackQuery, callback_data: PortfolioCallba
         )
 
 
-@router.callback_query(PortfolioCallback.filter(F.action == "view_file"))
-async def on_view_file(callback: CallbackQuery, callback_data: PortfolioCallback) -> None:
-    user_id = callback.from_user.id if callback.from_user else 0
-    session = get_session(user_id)
-
-    if not session or session.get("category_key") != callback_data.category:
-        await callback.answer("Список устарел. Выберите категорию заново.", show_alert=True)
-        return
-
+@router.callback_query(PortfolioCallback.filter(F.action == "categories"))
+async def on_back_to_categories(callback: CallbackQuery) -> None:
     logger.info(
-        "View file user_id=%s category=%s page=%s file_idx=%s",
-        user_id,
-        callback_data.category,
-        callback_data.page,
-        callback_data.file_idx,
+        "Back to categories user_id=%s",
+        callback.from_user.id if callback.from_user else 0,
     )
     await callback.answer()
 
     if callback.message:
-        await send_file_view(
-            callback.message,
-            user_id,
-            callback_data.category,
-            callback_data.page,
-            callback_data.file_idx,
-        )
-
-
-@router.callback_query(PortfolioCallback.filter(F.action == "back_to_list"))
-async def on_back_to_list(callback: CallbackQuery, callback_data: PortfolioCallback) -> None:
-    user_id = callback.from_user.id if callback.from_user else 0
-    session = get_session(user_id)
-
-    if not session or session.get("category_key") != callback_data.category:
-        await callback.answer("Список устарел. Выберите категорию заново.", show_alert=True)
-        return
-
-    logger.info(
-        "Back to list user_id=%s category=%s page=%s",
-        user_id,
-        callback_data.category,
-        callback_data.page,
-    )
-    await callback.answer()
-
-    if callback.message:
-        try:
-            await callback.message.delete()
-        except Exception as exc:
-            logger.warning("Could not delete view message: %s", exc)
-
-        await send_portfolio_page(
-            callback.message,
-            user_id,
-            callback_data.category,
-            callback_data.page,
-        )
+        await callback.message.answer(MENU_MESSAGE, reply_markup=portfolio_keyboard())
